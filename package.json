@@ -8,7 +8,7 @@
     "url": "http://www.muazkhan.com/"
   },
   "description": "RTCMultiConnection is a WebRTC JavaScript wrapper library runs top over RTCPeerConnection API to support all possible peer-to-peer features.",
-  "main": "server.js",
+  "main": "RTCMultiConnection.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/muaz-khan/RTCMultiConnection.git"
@@ -16,7 +16,6 @@
   "scripts": {
     "start": "node server.js"
   },
-  "main": "RTCMultiConnection.js",
   "keywords": [
     "peer-to-peer",
     "peer2peer",
@@ -40,9 +39,6 @@
     "muaz",
     "muaz-khan"
   ],
-  "dependencies": {
-    "socket.io": "0.9.17"
-  },
   "analyze": false,
   "license": "MIT",
   "readmeFilename": "README.md",
@@ -52,6 +48,11 @@
   },
   "homepage": "https://rtcmulticonnection.herokuapp.com/",
   "_from": "rtcmulticonnection-v3@",
+  "dependencies": {
+    "express": "^4.14.0",
+    "pug": "^2.0.0-beta4",
+    "socket.io": "^0.9.17"
+  },
   "devDependencies": {
     "grunt": "0.4.5",
     "grunt-bump": "0.7.0",
