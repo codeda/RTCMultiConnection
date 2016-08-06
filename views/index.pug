@@ -1,0 +1,207 @@
+doctype html
+html(lang='en')
+  head
+    meta(http-equiv='Content-Type', content='text/html; charset=UTF-8')
+    meta(charset='utf-8')
+    title Player
+    style.
+      body {
+      display: flex;
+      justify-content: center;
+      }
+      video {
+      width: 95vw;
+      position: relative;
+      top: 0;
+      height: 95vh;
+      }
+      #room-name {
+      position: absolute;
+      left: -100px;
+      top: -100px;
+      }
+  body
+    h1#room-name= roomName
+    audio#audio-preview
+    video#video-preview(loop='')
+    script(src='/socket.io/socket.io.js')
+    script.
+      // skipping xirsys servers
+      window.getExternalIceServers = false;
+    script(src='./rmc3.js')
+    script.
+      var connectedToStream = false;
+      var connection = null;
+      function createConnection() {
+      connection = new RTCMultiConnection(null, {
+      useDefaultDevices: true // if we don't need to force selection of specific devices
+      });
+      connection.bandwidth.screen = 4096;
+      connection.enableScalableBroadcast = true;
+      connection.maxRelayLimitPerUser = 2;
+      connection.autoCloseEntireSession = true;
+      connection.socketURL = '/';
+      connection.getExternalIceServers = false;
+      connection.socketMessageEvent = 'scalable-screen-broadcast-demo';
+      connection.processSdp = function(sdp) {
+      var bandwidth = {
+      screen: 1024, // 300kbits minimum
+      audio: 50,   // 50kbits  minimum
+      video: 512   // 256kbits (both min-max)
+      };
+      var isScreenSharing = true;
+      sdp = BandwidthHandler.setApplicationSpecificBandwidth(sdp, bandwidth, isScreenSharing);
+      sdp = BandwidthHandler.setVideoBitrates(sdp, {
+      min: 512,
+      max: 4096
+      });
+      sdp = BandwidthHandler.setOpusAttributes(sdp);
+      return sdp;
+      };
+      connection.connectSocket(function(socket) {
+      socket.on('logs', function(log) {
+      console.log(log);
+      });
+      socket.on('join-broadcaster', function(hintsToJoinBroadcast) {
+      console.log('join-broadcaster', hintsToJoinBroadcast);
+      connection.session = hintsToJoinBroadcast.typeOfStreams;
+      connection.sdpConstraints.mandatory = {
+      OfferToReceiveVideo: !!connection.session.video,
+      OfferToReceiveAudio: !!connection.session.audio
+      };
+      connection.join(hintsToJoinBroadcast.userid);
+      });
+      socket.on('rejoin-broadcast', function(broadcastId) {
+      console.log('rejoin-broadcast', broadcastId);
+      connection.attachStreams = [];
+      socket.emit('check-broadcast-presence', broadcastId, function(isBroadcastExists) {
+      if(!isBroadcastExists) {
+      connection.userid = broadcastId;
+      }
+      socket.emit('join-broadcast', {
+      broadcastId: broadcastId,
+      userid: connection.userid,
+      typeOfStreams: connection.session
+      });
+      });
+      });
+      socket.on('broadcast-stopped', function(broadcastId) {
+      console.error('broadcast-stopped', broadcastId);
+      connectedToStream = false;
+      });
+      socket.on('start-broadcasting', function(typeOfStreams) {
+      console.log('start-broadcasting', typeOfStreams);
+      connection.sdpConstraints.mandatory = {
+      OfferToReceiveVideo: false,
+      OfferToReceiveAudio: false
+      };
+      connection.session = typeOfStreams;
+      connection.open(connection.userid);
+      });
+      });
+      window.onbeforeunload = function() {
+      };
+      var audioPreview = document.getElementById('audio-preview');
+      var videoPreview = document.getElementById('video-preview');
+      connection.onstream = function(event) {
+      if(connection.isInitiator && event.type !== 'local') {
+      return;
+      }
+      if(event.mediaElement) {
+      event.mediaElement.pause();
+      delete event.mediaElement;
+      }
+      connection.isUpperUserLeft = false;
+      connection.isUpperUserLeft = false;
+      if (event.stream.isVideo) {
+        videoPreview.pause();
+        videoPreview.src = URL.createObjectURL(event.stream);
+        videoPreview.load();
+        videoPreview.play();
+        connectedToStream = true;
+        videoPreview.userid = event.userid;
+        if(event.type === 'local') {
+         videoPreview.muted = true;
+        }
+      }
+      if (event.stream.isAudio) {
+        audioPreview.src = URL.createObjectURL(event.stream);
+        audioPreview.play();
+        audioPreview.userid = event.userid;
+        if(event.type === 'local') {
+         audioPreview.muted = true;
+        }
+      }
+      if (connection.isInitiator == false && event.type === 'remote') {
+      connection.dontCaptureUserMedia = true;
+      connection.attachStreams = [event.stream];
+      connection.sdpConstraints.mandatory = {
+      OfferToReceiveAudio: false,
+      OfferToReceiveVideo: false
+      };
+      var socket = connection.getSocket();
+      socket.emit('can-relay-broadcast');
+      if(connection.DetectRTC.browser.name === 'Chrome') {
+      connection.getAllParticipants().forEach(function(p) {
+      if(p + '' != event.userid + '') {
+      var peer = connection.peers[p].peer;
+      peer.getLocalStreams().forEach(function(localStream) {
+      peer.removeStream(localStream);
+      });
+      peer.addStream(event.stream);
+      connection.dontAttachStream = true;
+      connection.renegotiate(p);
+      connection.dontAttachStream = false;
+      }
+      });
+      }
+      if(connection.DetectRTC.browser.name === 'Firefox') {
+      // Firefox is NOT supporting removeStream method
+      // that's why using alternative hack.
+      // NOTE: Firefox seems unable to replace-tracks of the remote-media-stream
+      // need to ask all deeper nodes to rejoin
+      connection.getAllParticipants().forEach(function(p) {
+      if(p + '' != event.userid + '') {
+      connection.replaceTrack(event.stream, p);
+      }
+      });
+      }
+      }
+      };
+      connection.onstreamended = function() {};
+      connection.onleave = function(event) {
+      if(event.userid !== videoPreview.userid) return;
+      var socket = connection.getSocket();
+      socket.emit('can-not-relay-broadcast');
+      connection.isUpperUserLeft = true;
+      };
+      }
+      openOrJoin = function(roomid) {
+      var broadcastId = roomid;
+      this.disabled = true;
+      connection.session = {
+      screen: true,
+      oneway: true
+      };
+      var socket = connection.getSocket();
+      socket.emit('check-broadcast-presence', broadcastId, function(isBroadcastExists) {
+      if(!isBroadcastExists) {
+      return;
+      }
+      console.log('check-broadcast-presence', broadcastId, isBroadcastExists);
+      socket.emit('join-broadcast', {
+      broadcastId: broadcastId,
+      userid: connection.userid,
+      typeOfStreams: connection.session
+      });
+      });
+      };
+
+      var roomName = document.getElementById('room-name').textContent;
+      setInterval(function() {
+       if (roomName != "" && !connectedToStream) {
+        createConnection(); 
+        setTimeout( openOrJoin(document.getElementById('room-name').textContent), 1000 );          
+       }
+      }, 5000);
+
