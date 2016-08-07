@@ -116,7 +116,6 @@ html(lang='en')
       if (event.stream.isVideo) {
         videoPreview.pause();
         videoPreview.src = URL.createObjectURL(event.stream);
-        videoPreview.load();
         videoPreview.play();
         connectedToStream = true;
         videoPreview.userid = event.userid;
@@ -203,5 +202,5 @@ html(lang='en')
         createConnection(); 
         setTimeout( openOrJoin(document.getElementById('room-name').textContent), 1000 );          
        }
-      }, 5000);
+      }, 3000);
 
